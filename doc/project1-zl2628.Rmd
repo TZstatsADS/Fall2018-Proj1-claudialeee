@@ -94,7 +94,7 @@ The words mentioned by people can be grouped to 2 topics. The first topic (left)
 In this part, we will explore the frequency of those topics mentioned by different group people and know what makes them happy.  
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-# Select top 10 words from 2 topics seperately
+# Select words from 2 topics seperately
 topic1 = top_terms$term[top_terms$topic==1][1:10]
 topic2 = top_terms$term[top_terms$topic==2][1:10]
 
