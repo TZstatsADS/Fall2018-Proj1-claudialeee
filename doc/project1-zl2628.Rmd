@@ -1,0 +1,260 @@
+---
+title: "What made you happy today?"
+author: "Zhirong Li"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+![](/Users/claudia/Desktop/5243/Fall2018-Proj1-claudialeee-master/data/What-Makes-You-Happy.jpg)
+\newline
+
+```{r load libraries, warning=FALSE, message=FALSE, include=FALSE}
+library(tm)
+library(tidytext)
+library(tidyverse)
+library(DT)
+library(ggplot2)
+library(wordcloud)
+library(topicmodels) 
+library(SnowballC)
+library(pheatmap)
+```
+
+# Overview of the dataset  
+
+HappyDB is a corpus of 100,000 crowd-sourced happy moments via Amazon's Mechanical Turk. You can read more about it on https://arxiv.org/abs/1801.07746  
+We first clean the text. This analysis mainly uses clean text and attributes of different people, such as age, country, gender, marital and parenthood.  
+
+```{r load data, echo=FALSE, warning=FALSE, message=FALSE}
+# Load processed dataset
+processed_moments = read_csv("../output/processed_moments.csv")
+demographic = read_csv("../data/demographic.csv")
+dataset = merge(processed_moments, demographic)
+df = data.frame(dataset$wid, dataset$text, dataset$age, dataset$country, dataset$gender, dataset$marital, dataset$parenthood)
+colnames(df) = c("wid", "text", "age", "country", "gender", "marital", "parenthood")
+datatable(df)
+```
+
+# Topic Modeling
+
+Let's see the Maslow's Hierarchy of Needs Theory first.  
+
+![](/Users/claudia/Desktop/5243/Fall2018-Proj1-claudialeee-master/data/maslow-5.jpg)  
+
+This analysis first uses topic modeling to automatically identify major themes, usually by identifying informative words. Then we can see major topics making people happy. The topics seem to satisfy needs of people.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Using LDA to plot the most informative terms by a specificed number of topics
+input_text = dataset$text
+plot = T
+number_of_topics = 2
+# Create a corpus and document term matrix
+corpus = Corpus(VectorSource(input_text)) 
+DTM = DocumentTermMatrix(corpus)
+
+# Remove any empty rows in our document term matrix
+unique_indexes = unique(DTM$i) 
+DTM = DTM[unique_indexes,] 
+
+# Preform LDA & get topic in a tidy text format
+lda = LDA(DTM, k = number_of_topics, control = list(seed = 6))
+topics = tidy(lda, matrix = "beta")
+
+# Get the top ten terms for each topic
+top_terms = topics  %>% 
+  group_by(topic) %>% 
+  top_n(10, beta) %>% 
+  ungroup() %>% 
+  arrange(topic, -beta) 
+
+# If the user asks for a plot (TRUE by default)
+if(plot == T){
+    # Plot the top ten terms for each topic in order
+    top_terms %>% 
+      mutate(term = reorder(term, beta)) %>% 
+      ggplot(aes(term, beta, fill = factor(topic))) + 
+      geom_col(show.legend = FALSE) + 
+      facet_wrap(~ topic, scales = "free") + 
+      labs(x = NULL, y = "Beta") + 
+      coord_flip() 
+}else{ 
+    # If the user does not request a plot, return a list of sorted terms instead
+    top_terms
+}
+```
+
+The words mentioned by people can be grouped to 2 topics. The first topic (left) is about self-actualization and esteem needs and the second topic (right) is about belongingness and love needs. According to the words in first topic, people mention day, time, watched, received and job. The second topic reveals people's love needs from friends and families including husband and son.  
+
+# What are different people talking about?  
+In this part, we will explore the frequency of those topics mentioned by different group people and know what makes them happy.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Select top 10 words from 2 topics seperately
+topic1 = top_terms$term[top_terms$topic==1][1:10]
+topic2 = top_terms$term[top_terms$topic==2][1:10]
+word = unique(c(topic1, topic2))
+
+# Divide dataset by gender
+female = dataset[dataset$gender == "f", ]
+male = dataset[dataset$gender == "m", ]
+
+# Get word frequency and store
+docs.f = Corpus(VectorSource(female$text))
+dtm.f = TermDocumentMatrix(docs.f)
+m.f = as.matrix(dtm.f)
+v.f = sort(rowSums(m.f), decreasing=TRUE)
+d.f = data.frame(word = names(v.f), freq=v.f)
+vec.f = c()
+for (i in word) {
+  vec.f = c(vec.f, d.f$freq[d.f$word==i])
+}
+
+docs.m = Corpus(VectorSource(male$text))
+dtm.m = TermDocumentMatrix(docs.m)
+m.m = as.matrix(dtm.m)
+v.m = sort(rowSums(m.m), decreasing=TRUE)
+d.m = data.frame(word = names(v.m), freq=v.m)
+vec.m = c()
+for (i in word) {
+  vec.m = c(vec.m, d.m$freq[d.m$word==i])
+}
+
+# plot
+heat.df = data.frame(female=vec.f, male=vec.m)
+row.names(heat.df) = word
+pheatmap(as.matrix(heat.df))
+```
+  
+From this graph, we can see that male are more likely to talk about first topic while female are more likely to talk about words such as son in second topic.  
+
+# Who is happier?
+
+After text cleaning, the analysis first explore which group responses more to this topic. The graphs show the age distributions of different groups classified by gender, marital and parenthood. These densities take into consideration the survey weights assigned to each observation.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.align='center'}
+ggplot(data.frame(table(data.frame(dataset$age, dataset$gender)))) +
+  geom_point(mapping = aes(x=dataset.age, y=Freq, col=dataset.gender)) +
+  labs(title='Number of Responses Per Group', x='Age', y='Number', color='gender') +
+  scale_x_discrete(breaks=seq(0,100,10)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+We notice that the trends of female and male are similar while young man are happier than young woman. Number of responses from 28-year-old people reaches peak. After 50 years old, female are happier than male.  
+
+```{r,  echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.align='center'}
+ggplot(data.frame(table(data.frame(dataset$age, dataset$marital)))) +
+  geom_point(mapping = aes(x=dataset.age, y=Freq, col=dataset.marital)) +
+  labs(title='Number of Responses Per Group', x='Age', y='Number', color='marital') +
+  scale_x_discrete(breaks=seq(0,100,10)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+As suggested by the age distributions, we see that the single and married response more to this topic while the divorced, separated and widowed response less. When people are young, single status seems make them happier than married status. After 30-year-old, the married seems happier.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.align='center'}
+ggplot(data.frame(table(data.frame(dataset$age, dataset$parenthood)))) +
+  geom_point(mapping = aes(x=dataset.age, y=Freq, col=dataset.parenthood)) +
+  labs(title='Number of Responses Per Group', x='Age', y='Number', color='parenthood') +
+  scale_x_discrete(breaks=seq(0,100,10)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+It seems that people without children are happier when they are young since they do not bother by kids. After 40-year-older, people with children seem to be happier because children can take care of them.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.align='center'}
+# Barplot of number of responses of different groups
+bar_plot = function(var, var.name){
+  d = table(var)
+  if(var.name == "Country"){
+    df = data.frame(d[d>200])
+  } else{
+    df = data.frame(d)
+  }
+  ggplot(df, aes(x=var, y=Freq)) +
+    geom_bar(stat="identity", fill="steelblue") +
+    geom_text(aes(label=Freq), vjust=-0.3, size=3.5) +
+    theme_minimal() + 
+    labs(title='Number of Responses Per Group', x=var.name, y='Number') +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+# Define age range
+dataset$age_range = ifelse(dataset$age < 30, "1-30", ifelse(dataset$age < 60, "30-60", "60-100"))
+# Barplot
+#bar_plot(dataset$age_range, "age_range")
+#bar_plot(dataset$gender, "gender")
+#bar_plot(dataset$marital, "marital")
+#bar_plot(dataset$parenthood, "parenthood")
+bar_plot(dataset$country, "Country")
+```
+The result may affected by data collection. According to the graph, people in the US and India are happier than people live in other countries.  
+
+# WordCloud
+
+The whole dataset is divided by age, gender, marital and parenthood in this part, following by WordCloud and word frequency graphs for different people. From the graph, we can explore what contributes more to happiness of different people.  
+When it comes to age, people are grouped by the following criteria:  
+1. Young: 1-30 years old  
+2. Middle: 30-60 years old  
+3. Old: 60-100 years old  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Divide dataset by age
+young = dataset[dataset$age_range == "1-30", ]
+middle = dataset[dataset$age_range == "30-60", ]
+old = dataset[dataset$age_range == "60-100", ]
+
+# Divide dataset by gender
+female = dataset[dataset$gender == "f", ]
+male = dataset[dataset$gender == "m", ]
+other = dataset[dataset$gender == "o", ]
+
+# Divide dataset by marital
+single = dataset[dataset$marital == "single", ]
+married = dataset[dataset$marital == "married", ]
+divorced = dataset[dataset$marital == "divorced", ]
+separated = dataset[dataset$marital == "separated", ]
+widowed = dataset[dataset$marital == "widowed", ]
+
+# Divide dataset by parenthood
+parenty = dataset[dataset$parenthood == "y", ]
+parentn = dataset[dataset$parenthood == "n", ]
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Function used to draw WordCloud and frequency table
+wordcloud_pic = function(text){
+  docs = Corpus(VectorSource(text))
+  dtm = TermDocumentMatrix(docs)
+  m = as.matrix(dtm)
+  v = sort(rowSums(m), decreasing=TRUE)
+  d = data.frame(word = names(v), freq=v)
+  par(mfrow=c(1, 2))
+  wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+            max.words=200, random.order=FALSE, rot.per=0.35, 
+            colors=brewer.pal(8, "Dark2"))
+  barplot(d[1:10,]$freq, las = 2, names.arg = d[1:10,]$word,
+        col = "lightblue", main = "Most Frequent Words",
+        ylab = "Frequency")
+}
+```
+
+Let's first see the overview of the whole dataset.  
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Overview
+wordcloud_pic(dataset$text)
+```
+
+Overally, from barplot, we can see that people are more likely to talk about friend, day and time. Then words mentioned more are family, watched, home and played. In WordCloud, we can see other words mentioned by people, such as love, gifts, game and family-related words(daughter, husband, son), which conforms to common senses.  
+
+With the same method, we can see WordCloud and word frequency plot for specific groups. From the result, we know that the result of young people is similar to that of the result above. A little different from the whole dataset, middle-aged people are more likely to mention daughter, son and night. For old people, they are more rely on their spouses since they are more likely to mention words such as wife and husband.  
+Female are more likely to talk about family-related words such as husband, son, family, daughter and home. When it comes to male, they mention game besides family-related words.  
+The married are likely to talk about family, husband, wife, daughter and son. Those words about spouse indeed disappear in the words mention by divorced. They are more care about thier children and are more willing to mention other words such as money and boyfriend.  
+The difference between people who are parent and those who are not is very apparent. People who are parent are more care about their family while the words about children do not appear in the plot of people who are not parent.  
+
+# Summary
+
+- When self-actualization needs, esteem needs, belongingness needs and love needs are satisfied, people are happy.  
+- Most people care about friend and time they have. At the same time, happiness reason varies by age, gender, marital, parenthood and country.
