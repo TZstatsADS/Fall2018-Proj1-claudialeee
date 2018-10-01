@@ -8,6 +8,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+# The pictures in the Rmd file are in data folder. Please put them in the appropriate desination in you local machine when you run the Rmd file to get complete result.
 ```
 
 ![](/Users/claudia/Desktop/5243/Fall2018-Proj1-claudialeee-master/data/What-Makes-You-Happy.jpg)
@@ -32,6 +33,8 @@ We first clean the text. This analysis mainly uses clean text and attributes of 
 
 ```{r load data, echo=FALSE, warning=FALSE, message=FALSE}
 # Load processed dataset
+# Please either unzip processed_moments.csv.zip or use Text_Processing.Rmd to generate processed_moments.csv in output folder. project1-zl2628.Rmd will use this processed file.
+
 processed_moments = read_csv("../output/processed_moments.csv")
 demographic = read_csv("../data/demographic.csv")
 dataset = merge(processed_moments, demographic)
@@ -90,14 +93,13 @@ if(plot == T){
 
 The words mentioned by people can be grouped to 2 topics. The first topic (left) is about self-actualization and esteem needs and the second topic (right) is about belongingness and love needs. According to the words in first topic, people mention day, time, watched, received and job. The second topic reveals people's love needs from friends and families including husband and son.  
 
-# What are different people talking about?  
+# Which topic are different people talking about?  
 In this part, we will explore the frequency of those topics mentioned by different group people and know what makes them happy.  
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-# Select top 10 words from 2 topics seperately
+# Select words from 2 topics seperately
 topic1 = top_terms$term[top_terms$topic==1][1:10]
 topic2 = top_terms$term[top_terms$topic==2][1:10]
-word = unique(c(topic1, topic2))
 
 # Divide dataset by gender
 female = dataset[dataset$gender == "f", ]
@@ -109,28 +111,40 @@ dtm.f = TermDocumentMatrix(docs.f)
 m.f = as.matrix(dtm.f)
 v.f = sort(rowSums(m.f), decreasing=TRUE)
 d.f = data.frame(word = names(v.f), freq=v.f)
-vec.f = c()
-for (i in word) {
-  vec.f = c(vec.f, d.f$freq[d.f$word==i])
+vec.f.1 = c()
+for (i in topic1) {
+  vec.f.1 = c(vec.f.1, d.f$freq[d.f$word==i])
 }
+vec.f.1 = sum(vec.f.1)
+vec.f.2 = c()
+for (i in topic2) {
+  vec.f.2 = c(vec.f.2, d.f$freq[d.f$word==i])
+}
+vec.f.2 = sum(vec.f.2)
 
 docs.m = Corpus(VectorSource(male$text))
 dtm.m = TermDocumentMatrix(docs.m)
 m.m = as.matrix(dtm.m)
 v.m = sort(rowSums(m.m), decreasing=TRUE)
 d.m = data.frame(word = names(v.m), freq=v.m)
-vec.m = c()
-for (i in word) {
-  vec.m = c(vec.m, d.m$freq[d.m$word==i])
+vec.m.1 = c()
+for (i in topic1) {
+  vec.m.1 = c(vec.m.1, d.m$freq[d.m$word==i])
 }
+vec.m.1 = sum(vec.m.1)
+vec.m.2 = c()
+for (i in topic2) {
+  vec.m.2 = c(vec.m.2, d.m$freq[d.m$word==i])
+}
+vec.m.2 = sum(vec.m.2)
 
 # plot
-heat.df = data.frame(female=vec.f, male=vec.m)
-row.names(heat.df) = word
+heat.df = data.frame(female=c(vec.f.1, vec.f.2), male=c(vec.m.1, vec.m.2))
+row.names(heat.df) = c("esteem", "love")
 pheatmap(as.matrix(heat.df))
 ```
   
-From this graph, we can see that male are more likely to talk about first topic while female are more likely to talk about words such as son in second topic.  
+From this graph, we can see that male are more eager to satisfy esteem and love needs.  
 
 # Who is happier?
 
